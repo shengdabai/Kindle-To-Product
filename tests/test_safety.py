@@ -18,7 +18,8 @@ class SafetyTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.bin = self.root / 'bin'
         self.bin.mkdir()
-        for name in ('ocr-pages.sh', 'ocr-smart.sh', 'auto-capture.sh', 'build-pdf.sh'):
+        for name in ('ocr-pages.sh', 'ocr-smart.sh', 'auto-capture.sh', 'build-pdf.sh',
+                     'clean-md.sh', 'clean-noid.sh'):
             shutil.copy2(ROOT / name, self.root / name)
         self.env = {'PATH': f'{self.bin}:{os.defpath}', 'HOME': str(self.root),
                     'TRACE': str(self.root / 'trace')}
@@ -107,6 +108,43 @@ class SafetyTests(unittest.TestCase):
         result = self.run_script('ocr-pages.sh', '../escape')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('one directory name', result.stderr)
+
+    def test_cleaners_reject_paths_before_reading_or_writing(self):
+        outside = self.root / 'outside'
+        outside.mkdir()
+        (outside / 'full.md').write_text('Synthetic text')
+        (outside / 'clean.md').write_text('Previous result')
+        for script in ('clean-md.sh', 'clean-noid.sh'):
+            for book in ('../outside', '.', '..', str(outside), 'book\nname', 'book\rname'):
+                with self.subTest(script=script, book=book):
+                    result = self.run_script(script, book)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('one directory name', result.stderr)
+                    self.assertEqual((outside / 'clean.md').read_text(), 'Previous result')
+
+    def test_cleaners_treat_book_names_as_data(self):
+        books = ('中文 "quoted" book', 'book\\name',
+                 'book"); __import__(\'pathlib\').Path(\'injected\').touch(); #')
+        for script in ('clean-md.sh', 'clean-noid.sh'):
+            for book in books:
+                with self.subTest(script=script, book=book):
+                    work = self.root / 'output' / book
+                    work.mkdir(exist_ok=True)
+                    (work / 'full.md').write_text('<!-- page 2 -->\nSynthetic prose.\n')
+                    (self.root / 'injected').unlink(missing_ok=True)
+                    result = self.run_script(script, book)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn('Synthetic prose.', (work / 'clean.md').read_text())
+                    self.assertFalse((self.root / 'injected').exists())
+
+    def test_empty_cleaner_input_preserves_previous_output(self):
+        (self.work / 'full.md').write_text('')
+        for script in ('clean-md.sh', 'clean-noid.sh'):
+            with self.subTest(script=script):
+                (self.work / 'clean.md').write_text('Previous result')
+                result = self.run_script(script, self.book)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual((self.work / 'clean.md').read_text(), 'Previous result')
 
     def test_successful_ocr_writes_all_pages_and_valid_manifest(self):
         for script in ('ocr-pages.sh', 'ocr-smart.sh'):

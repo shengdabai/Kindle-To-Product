@@ -72,7 +72,7 @@ def chunk_files(directory: Path) -> list[Path]:
         numbered[int(match[1])] = path
     if not numbered:
         raise ValueError(f'no chunks found: {directory}')
-    if sorted(numbered) != list(range(1, max(numbered) + 1)):
+    if any(number != expected for expected, number in enumerate(sorted(numbered), 1)):
         raise ValueError(f'chunk sequence has gaps: {directory}')
     return [numbered[n] for n in sorted(numbered)]
 
