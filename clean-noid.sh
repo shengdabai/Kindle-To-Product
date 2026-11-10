@@ -8,6 +8,9 @@ set -eo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOK_NAME="${1:-no-one-did-it}"
+case "$BOOK_NAME" in
+  ""|.|..|*/*|*$'\n'*|*$'\r'*) echo "ERROR: book name must be one directory name" >&2; exit 1 ;;
+esac
 export SRC="$ROOT/output/$BOOK_NAME/full.md"
 export DST="$ROOT/output/$BOOK_NAME/clean.md"
 
@@ -15,11 +18,13 @@ export DST="$ROOT/output/$BOOK_NAME/clean.md"
 echo "Cleaning: $SRC -> $DST"
 
 python3 <<'PYEOF'
-import os, re
+import os, re, sys
 from pathlib import Path
 
 src = Path(os.environ['SRC']); dst = Path(os.environ['DST'])
 text = src.read_text(encoding="utf-8")
+if not text.strip():
+    sys.exit("ERROR: full.md is empty; previous clean.md kept")
 
 fm = re.match(r'^(---\n.*?\n---\n)', text, re.DOTALL)
 frontmatter = fm.group(1) if fm else ""

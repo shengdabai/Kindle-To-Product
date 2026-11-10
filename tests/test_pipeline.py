@@ -185,6 +185,17 @@ class PipelineTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(output.read_text(), 'keep previous output')
 
+    def test_merge_rejects_huge_sparse_chunk_number_without_range_allocation(self):
+        self.translations([1])
+        (self.work / 'chunks-zh/chunk-99999999999999999999.md').write_text('Body')
+        output = self.work / 'clean-zh.md'
+        output.write_text('Previous result')
+        result = self.run_script('merge-zh.py', '--work', str(self.work))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('chunk sequence has gaps', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        self.assertEqual(output.read_text(), 'Previous result')
+
     def test_merge_detects_missing_final_translation_from_source_chunks(self):
         self.translations(range(1, 5))
         folder = self.work / 'chunks'

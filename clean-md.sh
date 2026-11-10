@@ -9,6 +9,9 @@ set -eo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOOK_NAME="${1:-half-second}"
+case "$BOOK_NAME" in
+  ""|.|..|*/*|*$'\n'*|*$'\r'*) echo "ERROR: book name must be one directory name" >&2; exit 1 ;;
+esac
 SRC="$ROOT/output/$BOOK_NAME/full.md"
 DST="$ROOT/output/$BOOK_NAME/clean.md"
 
@@ -20,13 +23,15 @@ fi
 echo "Cleaning: $SRC -> $DST"
 
 # 用 Python 做清理 (sed 处理多行模式跨平台麻烦)
-python3 <<PYEOF
-import re
+python3 - "$SRC" "$DST" <<'PYEOF'
+import re, sys
 from pathlib import Path
 
-src = Path("$SRC")
-dst = Path("$DST")
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
 text = src.read_text(encoding="utf-8")
+if not text.strip():
+    sys.exit("ERROR: full.md is empty; previous clean.md kept")
 
 # 1. 拆 frontmatter
 fm_match = re.match(r'^(---\n.*?\n---\n)', text, re.DOTALL)
